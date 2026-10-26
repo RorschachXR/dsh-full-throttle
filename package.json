@@ -1,0 +1,43 @@
+{
+  "name": "dsh-full-throttle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Full Throttle mode for DeepSeek Harness: a composer switch that injects a high-budget, no-holds-barred instruction into the system prompt.",
+  "type": "module",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RorschachXR/dsh-full-throttle.git"
+  },
+  "homepage": "https://github.com/RorschachXR/dsh-full-throttle#readme",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json",
+    "docs/*.png",
+    "README.md",
+    "README.zh.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "icon": "./icon.svg"
+}
+

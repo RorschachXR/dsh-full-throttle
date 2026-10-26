@@ -1,0 +1,7 @@
+# Dev overlay for a CLI-managed profile (not needed when installing from GitHub):
+#   dsh --profile web --patch <this file> --no-open
+# The relative row name is anchored beside this patch file.
+- insert:
+    - id: full-throttle
+      name: './index.js'
+

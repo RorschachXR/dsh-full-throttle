@@ -1,0 +1,6 @@
+# Bundle layer for dsh-full-throttle: one Host row owning the fullThrottle
+# Remote namespace, its state file, and the dynamic system-prompt section.
+- insert:
+    - id: full-throttle
+      name: 'dsh-full-throttle'
+
