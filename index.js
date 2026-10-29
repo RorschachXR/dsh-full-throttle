@@ -20,9 +20,19 @@ const STATE_FILE = 'full-throttle.json'
 /** Prompt section identity and placement, after first-party guidance and before the persona suffix. */
 const SECTION_NAME = 'full-throttle:mode'
 const SECTION_ORDER = 10150
+/** Prompt section carrying the optional subagent note, right after the main one. */
+const SUBAGENT_SECTION_NAME = 'full-throttle:subagents'
+const SUBAGENT_SECTION_ORDER = SECTION_ORDER + 1
 /** Instruction text injected while the switch is on. */
 const DEFAULT_INSTRUCTIONS =
   '我们是一家实力雄厚的大模型公司，你的 token 用量预算无限，不要吝惜或有所保留。一切以高标准完成任务为优先。'
+/**
+ * Optional note injected only when the `subagents` option is on. It is a separate section
+ * with its own opt-in because asking for subagents is a preference, not a budget matter:
+ * a profile that wants the budget wording has not thereby asked for work to be split up.
+ */
+const DEFAULT_SUBAGENT_INSTRUCTIONS =
+  '当任务足够复杂、可以并行推进时，鼓励先组建智能体团队分工协作；如果任务本身不需要拆分，不必勉强。'
 
 /** Resolve the harness home the same way the shipped instruction plugin does. */
 function resolveDshHome(explicit) {
@@ -32,12 +42,19 @@ function resolveDshHome(explicit) {
   return join(homedir(), '.dsh')
 }
 
-/** Keep the injection non-empty; an empty configured string falls back to the default. */
-function instructionsOf(config) {
-  const configured = config?.instructions
-  if (typeof configured !== 'string') return DEFAULT_INSTRUCTIONS
+/** Keep an injected text non-empty; an empty configured string falls back to its default. */
+function textOf(configured, fallback) {
+  if (typeof configured !== 'string') return fallback
   const text = configured.trim()
-  return text.length > 0 ? text : DEFAULT_INSTRUCTIONS
+  return text.length > 0 ? text : fallback
+}
+
+/**
+ * The subagent note is opt-in twice over: it needs the switch on, and its own flag on.
+ * A profile that never mentions the flag gets the pre-existing behaviour exactly.
+ */
+function subagentsRequested(config) {
+  return config?.subagents === true
 }
 
 /** Full-throttle state and prompt text, exposed to the browser as `remote.fullThrottle`. */
@@ -45,17 +62,25 @@ class FullThrottleService {
   constructor(ctx, config) {
     this.ctx = ctx
     this.file = join(resolveDshHome(config?.dshHome), STATE_FILE)
-    this.instructions = instructionsOf(config)
+    this.instructions = textOf(config?.instructions, DEFAULT_INSTRUCTIONS)
+    this.subagentInstructions = textOf(config?.subagentInstructions, DEFAULT_SUBAGENT_INSTRUCTIONS)
+    /** Config default; the state file may override it once the user has chosen. */
+    this.subagents = subagentsRequested(config)
     this.enabled = false
     this.typertRemote = { service: this, serviceKey: SERVICE_KEY, namespace: SERVICE_KEY }
     this.ready = this.restore()
   }
 
-  /** Read the persisted switch once at activation; a missing file means off. */
+  /**
+   * Read the persisted state once at activation. Every field is optional, so a file written
+   * by an older version of the plugin (only `enabled`) still loads and keeps the config
+   * default for everything it does not mention.
+   */
   async restore() {
     try {
       const parsed = JSON.parse(await readFile(this.file, 'utf8'))
       if (typeof parsed?.enabled === 'boolean') this.enabled = parsed.enabled
+      if (typeof parsed?.subagents === 'boolean') this.subagents = parsed.subagents
     } catch (error) {
       if (error?.code !== 'ENOENT') this.warn('restore', error)
     }
@@ -67,10 +92,20 @@ class FullThrottleService {
     } catch {}
   }
 
+  /** One shape for every reader: the browser, the tests and `toggle` all see the same fields. */
+  snapshot() {
+    return {
+      enabled: this.enabled,
+      instructions: this.instructions,
+      subagents: this.subagents,
+      subagentInstructions: this.subagentInstructions,
+    }
+  }
+
   /** Current switch state plus the text it injects. */
   async getState() {
     await this.ready
-    return { enabled: this.enabled, instructions: this.instructions }
+    return this.snapshot()
   }
 
   /** Flip the switch, persist it, and return the new state. */
@@ -83,14 +118,31 @@ class FullThrottleService {
       this.enabled = !this.enabled
       throw error
     }
-    return { enabled: this.enabled, instructions: this.instructions }
+    return this.snapshot()
+  }
+
+  /**
+   * Flip the optional subagent note, persist it, and return the new state.
+   * Same shape as `toggle`, and a no-op failure leaves the flag as it was.
+   */
+  async toggleSubagents() {
+    await this.ready
+    const previous = this.subagents
+    this.subagents = !previous
+    try {
+      await this.persist()
+    } catch (error) {
+      this.subagents = previous
+      throw error
+    }
+    return this.snapshot()
   }
 
   /** Replace the state file through a same-directory rename; readers never see a torn file. */
   async persist() {
     await mkdir(dirname(this.file), { recursive: true })
     const temp = this.file + '.' + process.pid.toString(36) + '.tmp'
-    await writeFile(temp, JSON.stringify({ enabled: this.enabled }), 'utf8')
+    await writeFile(temp, JSON.stringify({ enabled: this.enabled, subagents: this.subagents }), 'utf8')
     try {
       await rename(temp, this.file)
     } catch (error) {
@@ -103,6 +155,11 @@ class FullThrottleService {
   promptText() {
     return this.enabled ? this.instructions : ''
   }
+
+  /** The optional subagent note: off by default, and off whenever the switch is off. */
+  subagentPromptText() {
+    return this.enabled && this.subagents ? this.subagentInstructions : ''
+  }
 }
 
 /** Declaration-order Remote markers the Gateway's source-mode fallback reads. */
@@ -113,6 +170,7 @@ Object.defineProperty(FullThrottleService.prototype, REMOTE_METHODS, {
     methods: [
       { method: 'getState', invocation: { kind: 'direct' } },
       { method: 'toggle', invocation: { kind: 'direct' } },
+      { method: 'toggleSubagents', invocation: { kind: 'direct' } },
     ],
   },
 })
@@ -134,6 +192,18 @@ export function apply(ctx, config) {
         text: () => service.promptText(),
       }),
     'full-throttle.prompt-section',
+  )
+  // Registered unconditionally: the section resolves to '' unless the option is on, so a
+  // profile that leaves `subagents` alone renders exactly what it rendered before.
+  ctx.effect(
+    () =>
+      ctx.systemPrompt.section({
+        name: SUBAGENT_SECTION_NAME,
+        order: SUBAGENT_SECTION_ORDER,
+        interpolate: false,
+        text: () => service.subagentPromptText(),
+      }),
+    'full-throttle.subagent-section',
   )
   void service.ready
 }
