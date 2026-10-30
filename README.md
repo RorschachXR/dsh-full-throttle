@@ -16,8 +16,7 @@ The injected section disappears completely while the switch is off.
 ### Encouraging subagents (optional, off by default)
 
 A second, independent sentence can be injected on top of the paragraph above. It is **off by
-default** and has its own switch, because wanting the budget wording is not the same as wanting
-work split into subagents:
+default** and has its own switch:
 
 > 当任务足够复杂、可以并行推进时，鼓励先组建智能体团队分工协作；如果任务本身不需要拆分，不必勉强。
 >
