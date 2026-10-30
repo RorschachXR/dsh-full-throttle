@@ -38,7 +38,7 @@ assert.equal(JSON.stringify(moduleExports.inject), JSON.stringify(['slots', 'loc
 assert.equal(typeof moduleExports.apply, 'function')
 
 let mounted
-let registered
+const registered = new Map()
 const locales = new Map()
 const ctx = {
   effect(fn) {
@@ -64,11 +64,12 @@ const ctx = {
   },
   slots: {
     inject(owner, callback) {
-      assert.equal(owner, 'conversation.input.left')
+      // The real slots service only calls back once the owner slot exists; the stub calls
+      // it immediately so both registrations can be inspected.
       return callback()
     },
     register(options, component) {
-      registered = { options, component }
+      registered.set(options.name, { options, component })
       return () => {}
     },
   },
@@ -77,19 +78,47 @@ const ctx = {
 await moduleExports.apply(ctx)
 
 assert.equal(mounted.package, 'dsh-full-throttle')
-assert.equal(JSON.stringify(mounted.descriptors.map((descriptor) => descriptor.method)), JSON.stringify(['getState', 'toggle']))
+assert.equal(
+  JSON.stringify(mounted.descriptors.map((descriptor) => descriptor.method)),
+  JSON.stringify(['getState', 'toggle', 'toggleSubagents']),
+)
 for (const descriptor of mounted.descriptors) {
   assert.equal(descriptor.service, 'fullThrottle')
   assert.equal(descriptor.namespace, 'fullThrottle')
-  assert.equal(JSON.stringify(descriptor.parameters), '[]')
 }
-assert.equal(registered.options.name, 'conversation.input.left')
-assert.equal(registered.options.id, 'full-throttle-toggle')
-assert.equal(registered.options.locale, 'full-throttle')
-assert.equal(registered.options.order, 0)
-assert.equal(typeof registered.component, 'function')
-const injection = registered.options.inject('session-1')
-assert.equal(typeof injection.api, 'function')
-assert.equal(locales.get('full-throttle').key, 'full-throttle:dictionary')
-console.log('client.test.mjs: ok')
+assert.equal(JSON.stringify(mounted.descriptors[0].parameters), '[]')
+assert.equal(JSON.stringify(mounted.descriptors[1].parameters), '[]')
+assert.equal(JSON.stringify(mounted.descriptors[2].parameters), '[]', 'toggleSubagents takes no payload')
 
+const toggle = registered.get('conversation.input.left')
+assert.ok(toggle, 'the composer switch is registered in the toolbar slot')
+assert.equal(toggle.options.id, 'full-throttle-toggle')
+assert.equal(toggle.options.locale, 'full-throttle')
+assert.equal(toggle.options.order, 0)
+assert.equal(typeof toggle.component, 'function')
+const injection = toggle.options.inject('session-1')
+assert.equal(typeof injection.api, 'function')
+
+const settings = registered.get('settings.section')
+assert.ok(settings, 'the subagent option lives in its own settings section')
+assert.equal(settings.options.id, 'full-throttle-subagents-setting')
+assert.equal(settings.options.locale, 'full-throttle')
+assert.equal(typeof settings.component, 'function')
+assert.equal(typeof settings.options.inject('session-1').api, 'function')
+
+const entry = locales.get('full-throttle')
+assert.equal(entry.key, 'full-throttle:dictionary')
+assert.equal(entry.dictionary.zh.label, '火力全开')
+assert.equal(entry.dictionary.en.label, 'Full Throttle')
+for (const name of [
+  'settingsSubagents',
+  'settingsSubagentsHint',
+  'settingsOn',
+  'settingsOff',
+  'settingsError',
+  'settingsStale',
+]) {
+  assert.equal(typeof entry.dictionary.zh[name], 'string', name + ' is localized in zh')
+  assert.equal(typeof entry.dictionary.en[name], 'string', name + ' is localized in en')
+}
+console.log('client.test.mjs: ok')

@@ -13,6 +13,20 @@ in the profile.
 
 The injected section disappears completely while the switch is off.
 
+### Encouraging subagents (optional, off by default)
+
+A second, independent sentence can be injected on top of the paragraph above. It is **off by
+default** and has its own switch:
+
+> 当任务足够复杂、可以并行推进时，鼓励先组建智能体团队分工协作；如果任务本身不需要拆分，不必勉强。
+>
+> *When a task is complex enough to be split, prefer assembling an agent team and dividing the
+> work; when it does not call for splitting, there is no need to force it.*
+
+Turn it on from **Settings → Full Throttle → Encourage subagents** (the same switch is available
+as the `subagents` option below). The sentence is only injected while the main switch is on; the
+two settings are otherwise independent.
+
 ## Appearance
 
 | Off | On |
@@ -59,6 +73,20 @@ want to reset it to off.
     config:
       instructions: 'Spend the full budget. Never stop early.'
   ```
+
+- The optional subagent note has its own config, and can also be replaced:
+
+  ```yaml
+  - id: full-throttle
+    config:
+      subagents: true
+      subagentInstructions: 'Split independent work across subagents when it helps.'
+  ```
+
+  `subagents` supplies the default until you change the subagent switch in Settings; toggling
+  the main switch alone keeps following that config default. Settings writes your choice to
+  `$DSH_HOME/full-throttle.json` and that choice wins from then on. `subagentInstructions` falls
+  back to the default above when empty.
 
 ## Compatibility
 
