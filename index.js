@@ -66,6 +66,7 @@ class FullThrottleService {
     this.subagentInstructions = textOf(config?.subagentInstructions, DEFAULT_SUBAGENT_INSTRUCTIONS)
     /** Config default; the state file may override it once the user has chosen. */
     this.subagents = subagentsRequested(config)
+    this.subagentsChosen = false
     this.enabled = false
     this.typertRemote = { service: this, serviceKey: SERVICE_KEY, namespace: SERVICE_KEY }
     this.ready = this.restore()
@@ -80,7 +81,10 @@ class FullThrottleService {
     try {
       const parsed = JSON.parse(await readFile(this.file, 'utf8'))
       if (typeof parsed?.enabled === 'boolean') this.enabled = parsed.enabled
-      if (typeof parsed?.subagents === 'boolean') this.subagents = parsed.subagents
+      if (typeof parsed?.subagents === 'boolean') {
+        this.subagents = parsed.subagents
+        this.subagentsChosen = true
+      }
     } catch (error) {
       if (error?.code !== 'ENOENT') this.warn('restore', error)
     }
@@ -130,7 +134,8 @@ class FullThrottleService {
     const previous = this.subagents
     this.subagents = !previous
     try {
-      await this.persist()
+      await this.persist(true)
+      this.subagentsChosen = true
     } catch (error) {
       this.subagents = previous
       throw error
@@ -139,10 +144,12 @@ class FullThrottleService {
   }
 
   /** Replace the state file through a same-directory rename; readers never see a torn file. */
-  async persist() {
+  async persist(includeSubagents = this.subagentsChosen) {
     await mkdir(dirname(this.file), { recursive: true })
     const temp = this.file + '.' + process.pid.toString(36) + '.tmp'
-    await writeFile(temp, JSON.stringify({ enabled: this.enabled, subagents: this.subagents }), 'utf8')
+    const state = { enabled: this.enabled }
+    if (includeSubagents) state.subagents = this.subagents
+    await writeFile(temp, JSON.stringify(state), 'utf8')
     try {
       await rename(temp, this.file)
     } catch (error) {

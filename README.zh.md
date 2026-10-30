@@ -69,7 +69,8 @@ DeepSeek Harness 的“火力全开”模式：在输入框工具栏加一个开
       subagentInstructions: '适合并行时，把独立的工作拆给子代理。'
   ```
 
-  `subagents` 只是初始值；在设置页里拨过开关之后，你的选择会写进
+  在设置页里操作子代理开关之前，`subagents` 提供默认值；只切换主开关仍会跟随配置默认值。
+  在设置页里拨过子代理开关之后，你的选择会写进
   `$DSH_HOME/full-throttle.json` 并以那里为准。`subagentInstructions` 留空时回落到上面的默认句。
 
 ## 兼容性

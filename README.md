@@ -84,7 +84,8 @@ want to reset it to off.
       subagentInstructions: 'Split independent work across subagents when it helps.'
   ```
 
-  `subagents` only sets the starting value; switching it in Settings writes your choice to
+  `subagents` supplies the default until you change the subagent switch in Settings; toggling
+  the main switch alone keeps following that config default. Settings writes your choice to
   `$DSH_HOME/full-throttle.json` and that choice wins from then on. `subagentInstructions` falls
   back to the default above when empty.
 

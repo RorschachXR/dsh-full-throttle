@@ -63,8 +63,20 @@ try {
   assert.equal(note(first.sections).text(), '', 'no subagent note unless the option is on')
   assert.deepEqual(JSON.parse(await readFile(join(home, 'full-throttle.json'), 'utf8')), {
     enabled: true,
-    subagents: false,
   })
+
+  // The main switch must not turn a config default into an explicit preference.
+  const changedDefault = fakeContext()
+  plugin.apply(changedDefault.ctx, { dshHome: home, subagents: true })
+  const fromConfig = changedDefault.services.get('fullThrottle')
+  assert.equal((await fromConfig.getState()).subagents, true, 'a changed config default still applies')
+  assert.match(note(changedDefault.sections).text(), /智能体团队/)
+  await fromConfig.toggle()
+  assert.deepEqual(JSON.parse(await readFile(join(home, 'full-throttle.json'), 'utf8')), { enabled: false })
+  const changedBack = fakeContext()
+  plugin.apply(changedBack.ctx, { dshHome: home, subagents: false })
+  assert.equal((await changedBack.services.get('fullThrottle').getState()).subagents, false)
+  await fromConfig.toggle()
 
   const second = fakeContext()
   plugin.apply(second.ctx, { dshHome: home })
@@ -149,6 +161,24 @@ try {
   assert.equal(turnedOff.subagents, false)
   assert.equal(note(seventh.sections).text(), '', 'turning the option off removes the note')
   assert.equal(main(seventh.sections).text() !== '', true, 'the budget text is unaffected')
+
+  // An explicit OFF choice wins over a later ON config, even after using the main switch.
+  await settings.toggle()
+  const explicitOff = fakeContext()
+  plugin.apply(explicitOff.ctx, { dshHome: join(home, 'settings'), subagents: true })
+  assert.equal((await explicitOff.services.get('fullThrottle').getState()).subagents, false)
+
+  // A failed settings write must not record a choice on the next successful main toggle.
+  const failureHome = join(home, 'failed-choice')
+  await writeFile(failureHome, 'blocks the state directory', 'utf8')
+  const failedChoice = fakeContext()
+  plugin.apply(failedChoice.ctx, { dshHome: failureHome })
+  const failing = failedChoice.services.get('fullThrottle')
+  await assert.rejects(failing.toggleSubagents())
+  assert.equal((await failing.getState()).subagents, false)
+  await rm(failureHome)
+  await failing.toggle()
+  assert.deepEqual(JSON.parse(await readFile(join(failureHome, 'full-throttle.json'), 'utf8')), { enabled: true })
 
   // A state file written by the old version (only `enabled`) must still load.
   const ninth = fakeContext()
